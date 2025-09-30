@@ -240,7 +240,11 @@ def get_existing_runs(project_code, task_code):
     return runs
 
 def generate_run_number(project_code, task_code):
-    """Generates a new run number based on the last one in the database."""
+    """
+    Generates a new run number based on the last valid one in the database.
+    Iterates through past runs to find a valid number to increment,
+    making it resilient to malformed run number entries.
+    """
     connection = get_db_connection()
     cursor = connection.cursor()
     cursor.execute("""SELECT RUN_NUMBER FROM Define_RUN_NUM_Parameters
@@ -252,13 +256,19 @@ def generate_run_number(project_code, task_code):
 
     if not existing_runs:
         return f"{project_code}-{task_code}-001"
-    else:
-        last_run = existing_runs[0][0]
+
+    for run in existing_runs:
+        last_run = run[0]
         try:
+            # Attempt to parse the last part of the run number
             last_num = int(last_run.split('-')[-1])
             return f"{project_code}-{task_code}-{last_num + 1:03d}"
-        except:
-            return f"{project_code}-{task_code}-001"
+        except (ValueError, IndexError):
+            # If parsing fails, skip to the next-most-recent run number
+            continue
+
+    # If no valid run numbers are found in the history, start from 001
+    return f"{project_code}-{task_code}-001"
 
 def assign_run_number(project_code, task_code, job_description, workflow_steps, iterator):
     """Assigns a run number based on the workflow steps and job description."""
